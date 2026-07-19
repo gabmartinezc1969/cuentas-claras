@@ -1,0 +1,14 @@
+{
+  "name": "Cuentas Claras",
+  "short_name": "Cuentas Claras",
+  "description": "Finanzas personales y presupuesto, 100% offline y privado.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#5B0FBD",
+  "theme_color": "#5B0FBD",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

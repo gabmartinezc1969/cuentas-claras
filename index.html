@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Cuentas Claras</title>
+  <meta name="description" content="Finanzas personales y presupuesto, 100% offline y privado." />
+  <meta name="theme-color" content="#5B0FBD" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/icon.svg" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="header">
+      <div class="header-row">
+        <button id="btn-back" class="icon-btn" title="Atrás" style="visibility:hidden">←</button>
+        <div class="header-title" id="header-title">Cuentas Claras</div>
+        <button id="btn-theme" class="icon-btn" title="Cambiar tema">◐</button>
+      </div>
+      <nav class="tabbar" id="tabbar">
+        <button class="tab-btn" data-tab="inicio">INICIO</button>
+        <button class="tab-btn" data-tab="movimientos">MOVIMIENTOS</button>
+        <button class="tab-btn" data-tab="presupuestos">PRESUPUESTOS</button>
+        <button class="tab-btn" data-tab="objetivos">OBJETIVOS</button>
+        <button class="tab-btn" data-tab="ajustes">AJUSTES</button>
+      </nav>
+    </header>
+
+    <div class="period-row" id="period-row">
+      <button class="icon-btn" id="period-prev">←</button>
+      <div class="period-label" id="period-month">-</div>
+      <div class="period-year" id="period-year">-</div>
+      <button class="icon-btn" id="period-next">→</button>
+    </div>
+
+    <main id="main"></main>
+
+    <footer class="totals" id="footer-totals">
+      <div>
+        <div class="value" id="footer-saldo">$0.00</div>
+        <div class="label">Saldo</div>
+      </div>
+      <div>
+        <div class="value" id="footer-saldo-actual">$0.00</div>
+        <div class="label">Saldo actual</div>
+      </div>
+    </footer>
+
+    <button class="fab" id="fab-add" title="Agregar">+</button>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="lock-root"></div>
+
+  <script type="module" src="js/app.js"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>
