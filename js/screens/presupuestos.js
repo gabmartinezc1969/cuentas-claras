@@ -1,4 +1,5 @@
 import { overlapsMonth } from '../format.js';
+import { expandRecurringInRange } from '../analytics.js';
 
 export async function renderPresupuestos(container, ctx) {
   const { db, money, year, month, openBudgetModal } = ctx;
@@ -24,9 +25,9 @@ export async function renderPresupuestos(container, ctx) {
   }
 
   const cards = periodBudgets.map((b) => {
-    const spent = transactions
+    const expanded = expandRecurringInRange(transactions, new Date(b.startDate), new Date(b.endDate));
+    const spent = expanded
       .filter((t) => t.type === 'expense' && t.categoryId === b.categoryId)
-      .filter((t) => t.date >= b.startDate && t.date <= b.endDate)
       .filter((t) => !b.accountId || t.accountId === b.accountId)
       .reduce((s, t) => s + t.amount, 0);
 

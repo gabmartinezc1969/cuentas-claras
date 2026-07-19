@@ -1,4 +1,4 @@
-import { groupByTopCategory } from '../analytics.js';
+import { groupByTopCategory, expandRecurringForMonth } from '../analytics.js';
 
 function breakdownRows(topGroups, transactions, categories, money) {
   const catById = Object.fromEntries(categories.map((c) => [c.id, c]));
@@ -28,9 +28,9 @@ function breakdownRows(topGroups, transactions, categories, money) {
 }
 
 export async function renderEstadistica(container, ctx) {
-  const { db, money, inMonth, year, month } = ctx;
+  const { db, money, year, month } = ctx;
   const [transactions, categories] = await Promise.all([db.getAll('transactions'), db.getAll('categories')]);
-  const periodTx = transactions.filter((t) => inMonth(t.date, year, month));
+  const periodTx = expandRecurringForMonth(transactions, year, month);
 
   const income = periodTx.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
   const expense = periodTx.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);

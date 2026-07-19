@@ -1,12 +1,12 @@
 import { renderDonut, renderBars } from '../charts.js';
-import { groupByTopCategory } from '../analytics.js';
+import { groupByTopCategory, expandRecurringForMonth } from '../analytics.js';
 
 const localState = { view: 'bar', percent: false };
 
 export async function renderDiagrama(container, ctx) {
-  const { db, inMonth, year, month } = ctx;
+  const { db, year, month } = ctx;
   const [transactions, categories] = await Promise.all([db.getAll('transactions'), db.getAll('categories')]);
-  const periodTx = transactions.filter((t) => inMonth(t.date, year, month));
+  const periodTx = expandRecurringForMonth(transactions, year, month);
   const catData = groupByTopCategory(periodTx, categories, 'expense');
   const total = catData.reduce((s, d) => s + d.value, 0);
 

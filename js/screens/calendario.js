@@ -1,3 +1,5 @@
+import { expandRecurringForMonth } from '../analytics.js';
+
 const localState = { selectedDate: null };
 
 const DOW_SHORT = ['D', 'L', 'M', 'X', 'J', 'V', 'S'];
@@ -21,11 +23,13 @@ export async function renderCalendario(container, ctx) {
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDow = new Date(year, month, 1).getDay();
 
+  const periodTx = expandRecurringForMonth(allTx, year, month);
   const byDate = {};
-  for (const t of allTx) {
+  for (const t of periodTx) {
     if (!byDate[t.date]) byDate[t.date] = [];
     byDate[t.date].push(t);
   }
+  const byId = new Map(periodTx.map((t) => [String(t.id), t]));
 
   const pad2 = (n) => String(n).padStart(2, '0');
   const cells = [];
@@ -51,7 +55,7 @@ export async function renderCalendario(container, ctx) {
     const items = byDate[localState.selectedDate].map((t) => `
       <div class="tx-item" data-tx-id="${t.id}">
         <div class="tx-main">
-          <div class="tx-name">${t.note || catLabel(t.categoryId)}</div>
+          <div class="tx-name">${t.recurring && t.recurring !== 'none' ? '🔁 ' : ''}${t.note || catLabel(t.categoryId)}</div>
           <div class="tx-cat">${catLabel(t.categoryId)}, ${accById[t.accountId]?.name || ''}</div>
         </div>
         <div class="tx-amt ${t.type === 'income' ? 'positive' : 'negative'}">
@@ -80,8 +84,7 @@ export async function renderCalendario(container, ctx) {
   container.querySelectorAll('.tx-item').forEach((item) => {
     item.addEventListener('click', (e) => {
       e.stopPropagation();
-      const id = parseInt(item.dataset.txId, 10);
-      openTransactionModal(allTx.find((t) => t.id === id));
+      openTransactionModal(byId.get(item.dataset.txId));
     });
   });
 }

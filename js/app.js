@@ -124,6 +124,9 @@ async function accountOptions(selectedId, includeEmpty) {
 }
 
 async function openTransactionModal(existing) {
+  if (existing && existing.virtual) {
+    existing = await db.getById('transactions', existing.sourceId);
+  }
   const type = existing ? existing.type : 'expense';
   const categoriesHtml = {
     expense: await categoryOptions('expense'),
@@ -161,6 +164,24 @@ async function openTransactionModal(existing) {
         <label>Nota</label>
         <input type="text" name="note" placeholder="Descripción" value="${existing ? (existing.note || '') : ''}" />
       </div>
+      <div class="field">
+        <label>Recurrencia</label>
+        <select name="recurring">
+          <option value="none" ${!existing || existing.recurring === 'none' || !existing.recurring ? 'selected' : ''}>Única vez</option>
+          <option value="weekly" ${existing && existing.recurring === 'weekly' ? 'selected' : ''}>Cada semana</option>
+          <option value="monthly" ${existing && existing.recurring === 'monthly' ? 'selected' : ''}>Mensualmente</option>
+        </select>
+        ${existing && existing.recurring && existing.recurring !== 'none'
+          ? '<p style="font-size:12px;color:var(--text-muted);margin:6px 0 0">Esta transacción se repite automáticamente. Editarla o eliminarla afecta a todas sus repeticiones.</p>'
+          : ''}
+      </div>
+      <div class="settings-row" style="padding:6px 0">
+        <span>Conciliada con el banco</span>
+        <label class="switch">
+          <input type="checkbox" name="reconciled" ${existing && existing.reconciled ? 'checked' : ''} />
+          <span class="slider"></span>
+        </label>
+      </div>
       <div class="btn-row">
         ${existing ? '<button type="button" class="btn btn-danger" id="tx-delete">Eliminar</button>' : ''}
         <button type="submit" class="btn btn-primary">Guardar</button>
@@ -190,8 +211,8 @@ async function openTransactionModal(existing) {
         accountId: parseInt(fd.get('accountId'), 10),
         date: fd.get('date'),
         note: fd.get('note'),
-        recurring: existing ? existing.recurring : false,
-        reconciled: existing ? existing.reconciled : false,
+        recurring: fd.get('recurring') || 'none',
+        reconciled: fd.get('reconciled') === 'on',
       };
       if (existing) record.id = existing.id;
       await db.put('transactions', record);

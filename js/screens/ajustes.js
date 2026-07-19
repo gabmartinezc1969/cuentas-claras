@@ -1,3 +1,5 @@
+import { transactionsToCSV, csvToTransactions } from '../csv.js';
+
 const STORES = ['accounts', 'categories', 'transactions', 'budgets', 'goals'];
 
 export async function renderAjustes(container, ctx) {
@@ -56,6 +58,11 @@ export async function renderAjustes(container, ctx) {
         <label class="btn btn-outline" style="display:flex;align-items:center;justify-content:center">
           Importar copia de seguridad
           <input type="file" id="btn-import" accept="application/json" style="display:none" />
+        </label>
+        <button class="btn btn-outline" id="btn-export-csv">Exportar transacciones (CSV)</button>
+        <label class="btn btn-outline" style="display:flex;align-items:center;justify-content:center">
+          Importar transacciones (CSV)
+          <input type="file" id="btn-import-csv" accept=".csv,text/csv" style="display:none" />
         </label>
         <button class="btn btn-danger" id="btn-reset">Borrar todos los datos</button>
       </div>
@@ -131,6 +138,37 @@ export async function renderAjustes(container, ctx) {
       for (const record of data[s] || []) await db.put(s, record);
     }
     alert('Copia de seguridad importada.');
+    refresh();
+  });
+
+  container.querySelector('#btn-export-csv').addEventListener('click', async () => {
+    const [transactions, categories, accountsForCsv] = await Promise.all([
+      db.getAll('transactions'), db.getAll('categories'), db.getAll('accounts'),
+    ]);
+    const csv = transactionsToCSV(transactions, categories, accountsForCsv);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cuentas-claras-transacciones-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  container.querySelector('#btn-import-csv').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    const [categories, accountsForCsv] = await Promise.all([db.getAll('categories'), db.getAll('accounts')]);
+    const text = await file.text();
+    const { records, errors } = csvToTransactions(text, categories, accountsForCsv);
+    for (const record of records) await db.put('transactions', record);
+    let message = `${records.length} transacción(es) importada(s).`;
+    if (errors.length) {
+      message += `\n\n${errors.length} fila(s) omitida(s):\n${errors.slice(0, 10).join('\n')}`;
+      if (errors.length > 10) message += `\n… y ${errors.length - 10} más.`;
+    }
+    alert(message);
     refresh();
   });
 

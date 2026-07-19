@@ -32,22 +32,26 @@ Para instalarla como app: abre el sitio en Chrome/Edge (Android/desktop) o Safar
 - **Estadística**: totales de ingresos/gastos del período y desglose por categoría y subcategoría.
 - **Diagrama**: gráfico de barras y circular por categoría, con sub-tabs y toggle "Mostrar porcentaje".
 - **Calendario**: grid mensual con el neto de cada día; al tocar un día se listan sus transacciones.
-- **Ajustes**: modo claro/oscuro, bloqueo de la app con PIN (hash SHA-256 en `localStorage`, sin enviar nada a ningún servidor), gestión simple de cuentas, datos de ejemplo, exportar/importar copia de seguridad en JSON, borrar todos los datos.
+- **Transacciones recurrentes**: una transacción puede marcarse "Cada semana" o "Mensualmente"; sus repeticiones futuras (y pasadas) se proyectan automáticamente en Movimientos, Inicio, Estadística, Diagrama, Calendario y en el cálculo de "gastado" de Presupuestos, sin necesidad de crear una fila por período. Se muestran con el ícono 🔁. Editar o borrar la transacción afecta a todas sus repeticiones (no hay edición de una ocurrencia individual todavía).
+- **Conciliación bancaria**: cada transacción puede marcarse como "Conciliada con el banco" desde su formulario; se indica con "✓ conciliada" en Movimientos. (Aún no hay un filtro dedicado para ver solo conciliadas/pendientes.)
+- **Importar/Exportar CSV** de transacciones desde Ajustes, además del backup completo en JSON. El CSV usa el formato propio de la app (columnas: Fecha, Tipo, Monto, Categoria, Cuenta, Nota, Recurrencia, Conciliada); no incluye parsers para formatos bancarios de terceros.
+- **Ajustes**: modo claro/oscuro, bloqueo de la app con PIN (hash SHA-256 en `localStorage`, sin enviar nada a ningún servidor), gestión simple de cuentas, datos de ejemplo, exportar/importar copia de seguridad en JSON, exportar/importar transacciones en CSV, borrar todos los datos.
 - Selector de mes/año con navegación ← → en todas las pantallas con datos temporales.
 - PWA instalable con manifest + service worker (cache del app shell para uso offline).
 - Categorías por defecto: Casa (Alquiler, Seguros, Expensas, Internet), Coche (Gasolina, Reparación), Comida y bebida (Alimentos), Ocio, Indumentaria, Electrónica, Otros; e Ingresos (Salario, Subsidio familiar, Intereses).
 
-## Roadmap (v2 — no implementado aún)
+## Roadmap (v3 — no implementado aún)
 
-- Proyección automática de transacciones recurrentes hacia meses futuros (hoy `recurring` se guarda pero no se repite solo).
-- Importación de transacciones vía **CSV** (bancos) y exportación a **Excel/HTML/CSV**.
-- **Conciliación bancaria** (marcar transacciones como conciliadas contra el extracto).
+- Exportación a **Excel/HTML** (hoy solo CSV y JSON).
+- Soporte de importación para formatos CSV específicos de bancos (hoy solo el formato propio de exportación).
+- Filtro dedicado de "conciliadas / pendientes" en Movimientos.
 - **Copias de seguridad automáticas** (programadas), además de la exportación manual ya disponible.
 - **Biometría** (WebAuthn) como alternativa al PIN.
 - **Transacciones divididas** (un recibo repartido en varias categorías).
 - **Plantillas** de transacciones y entrada rápida vía widget / atajo del ícono.
 - **Fotos de recibos** adjuntas a una transacción.
 - **Recordatorios** de gastos próximos (Notifications API).
+- Edición de una única ocurrencia de una transacción recurrente (hoy editar/borrar afecta a todas).
 - Edición de categorías/subcategorías desde la UI (hoy son fijas, definidas en `js/db.js`).
 - Colores personalizables por el usuario (hoy son fijos vía variables CSS en `css/styles.css`).
 
@@ -65,8 +69,9 @@ cuentas-claras/
 │   ├── db.js            # capa de datos IndexedDB + seed
 │   ├── format.js         # helpers de moneda/fecha
 │   ├── charts.js          # gráfico circular (donut) y de barras, sin dependencias
-│   ├── analytics.js        # helpers de agregación (saldo acumulado, agrupación por categoría)
+│   ├── analytics.js        # agregación: saldo acumulado, agrupación por categoría, proyección de recurrentes
 │   ├── crypto.js           # hash SHA-256 para el PIN
+│   ├── csv.js               # export/import de transacciones en CSV
 │   └── screens/
 │       ├── inicio.js
 │       ├── movimientos.js

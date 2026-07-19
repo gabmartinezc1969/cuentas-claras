@@ -133,16 +133,16 @@ export async function seedDemoData() {
   const iso = (d) => new Date(y, m, d).toISOString().slice(0, 10);
 
   const demoTx = [
-    { type: 'income', amount: 2500, categoryName: 'Salario', accountName: 'Cuenta corriente', date: iso(1), note: 'Mi compañía' },
-    { type: 'income', amount: 500, categoryName: 'Subsidio familiar', accountName: 'Cuenta corriente', date: iso(1), note: 'Mi compañía' },
-    { type: 'income', amount: 20, categoryName: 'Intereses', accountName: 'Cuenta de ahorro', date: iso(1), note: 'Mi banco' },
-    { type: 'expense', amount: 800, categoryName: 'Alquiler', accountName: 'Cuenta corriente', date: iso(1), note: 'Mi apartamento' },
+    { type: 'income', amount: 2500, categoryName: 'Salario', accountName: 'Cuenta corriente', date: iso(1), note: 'Mi compañía', recurring: 'monthly' },
+    { type: 'income', amount: 500, categoryName: 'Subsidio familiar', accountName: 'Cuenta corriente', date: iso(1), note: 'Mi compañía', recurring: 'monthly' },
+    { type: 'income', amount: 20, categoryName: 'Intereses', accountName: 'Cuenta de ahorro', date: iso(1), note: 'Mi banco', recurring: 'monthly' },
+    { type: 'expense', amount: 800, categoryName: 'Alquiler', accountName: 'Cuenta corriente', date: iso(1), note: 'Mi apartamento', recurring: 'monthly' },
     { type: 'expense', amount: 150, categoryName: 'Seguros', accountName: 'Cuenta corriente', date: iso(2), note: 'Seguro de hogar' },
-    { type: 'expense', amount: 100, categoryName: 'Expensas', accountName: 'Cuenta corriente', date: iso(1), note: 'Electricidad' },
-    { type: 'expense', amount: 50, categoryName: 'Internet', accountName: 'Cuenta corriente', date: iso(3), note: 'Internet' },
+    { type: 'expense', amount: 100, categoryName: 'Expensas', accountName: 'Cuenta corriente', date: iso(1), note: 'Electricidad', recurring: 'monthly' },
+    { type: 'expense', amount: 50, categoryName: 'Internet', accountName: 'Cuenta corriente', date: iso(3), note: 'Internet', recurring: 'monthly' },
     { type: 'expense', amount: 250, categoryName: 'Reparación', accountName: 'Cuenta corriente', date: iso(4), note: 'Taller' },
     { type: 'expense', amount: 100, categoryName: 'Gasolina', accountName: 'Tarjeta de crédito', date: iso(5), note: 'Gasolinera' },
-    { type: 'expense', amount: 75, categoryName: 'Alimentos', accountName: 'Efectivo', date: iso(6), note: 'Supermercado' },
+    { type: 'expense', amount: 75, categoryName: 'Alimentos', accountName: 'Efectivo', date: iso(6), note: 'Supermercado', recurring: 'weekly' },
     { type: 'expense', amount: 240, categoryName: 'Ocio', accountName: 'Tarjeta de crédito', date: iso(7), note: 'Salidas' },
     { type: 'expense', amount: 230, categoryName: 'Indumentaria', accountName: 'Tarjeta de crédito', date: iso(9), note: 'Ropa' },
     { type: 'expense', amount: 125, categoryName: 'Electrónica', accountName: 'Tarjeta de crédito', date: iso(10), note: 'Accesorios' },
@@ -159,7 +159,7 @@ export async function seedDemoData() {
       accountId: acc(t.accountName),
       date: t.date,
       note: t.note,
-      recurring: false,
+      recurring: t.recurring || 'none',
       reconciled: false,
     });
   }
@@ -173,9 +173,8 @@ export async function seedDemoData() {
     endDate: `${y}-12-31`,
   });
 
-  const casaCat = categories.find((c) => c.name === 'Comida y bebida' && c.parentId === null);
   await put('budgets', {
-    categoryId: casaCat ? casaCat.id : byName('Alimentos').id,
+    categoryId: byName('Alimentos').id,
     accountId: null,
     amount: 300,
     startDate: `${y}-${String(m + 1).padStart(2, '0')}-01`,
