@@ -1,4 +1,4 @@
-const CACHE_NAME = 'cuentas-claras-v1';
+const CACHE_NAME = 'cuentas-claras-v2';
 const APP_SHELL = [
   './',
   './index.html',
@@ -7,9 +7,15 @@ const APP_SHELL = [
   './js/db.js',
   './js/format.js',
   './js/charts.js',
+  './js/analytics.js',
+  './js/crypto.js',
   './js/app.js',
   './js/screens/inicio.js',
   './js/screens/movimientos.js',
+  './js/screens/resumen.js',
+  './js/screens/estadistica.js',
+  './js/screens/diagrama.js',
+  './js/screens/calendario.js',
   './js/screens/presupuestos.js',
   './js/screens/objetivos.js',
   './js/screens/ajustes.js',

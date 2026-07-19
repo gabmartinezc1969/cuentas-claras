@@ -1,4 +1,5 @@
 import { renderDonut, renderBars } from '../charts.js';
+import { groupByTopCategory } from '../analytics.js';
 
 export async function renderInicio(container, ctx) {
   const { db, money, inMonth, year, month } = ctx;
@@ -9,22 +10,7 @@ export async function renderInicio(container, ctx) {
   const expense = periodTx.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const balance = income - expense;
 
-  const catById = Object.fromEntries(categories.map((c) => [c.id, c]));
-  const topLevelOf = (catId) => {
-    const c = catById[catId];
-    if (!c) return null;
-    return c.parentId === null ? c : catById[c.parentId];
-  };
-
-  const totalsByTopCategory = new Map();
-  for (const t of periodTx.filter((t) => t.type === 'expense')) {
-    const top = topLevelOf(t.categoryId);
-    if (!top) continue;
-    const prev = totalsByTopCategory.get(top.id) || { label: top.name, value: 0, color: top.color };
-    prev.value += t.amount;
-    totalsByTopCategory.set(top.id, prev);
-  }
-  const catData = Array.from(totalsByTopCategory.values()).sort((a, b) => b.value - a.value);
+  const catData = groupByTopCategory(periodTx, categories, 'expense');
   const top5 = catData.slice(0, 5);
 
   container.innerHTML = `

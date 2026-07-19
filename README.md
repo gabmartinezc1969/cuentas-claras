@@ -28,6 +28,10 @@ Para instalarla como app: abre el sitio en Chrome/Edge (Android/desktop) o Safar
 - **Movimientos**: listado agrupado por día con saldo acumulado, alta/edición/borrado de transacciones (ingreso o gasto), selección de cuenta y categoría/subcategoría.
 - **Presupuestos**: creación de presupuestos por categoría (y opcionalmente por cuenta), con barra de progreso rojo/verde y recurrencia (única vez / semanal / mensual).
 - **Objetivos de ahorro**: metas ligadas a una cuenta, con barra de progreso y estado "Objetivo alcanzado".
+- **Resumen**: histórico mensual con saldo acumulado a fin de cada mes y barra ingresos/gastos.
+- **Estadística**: totales de ingresos/gastos del período y desglose por categoría y subcategoría.
+- **Diagrama**: gráfico de barras y circular por categoría, con sub-tabs y toggle "Mostrar porcentaje".
+- **Calendario**: grid mensual con el neto de cada día; al tocar un día se listan sus transacciones.
 - **Ajustes**: modo claro/oscuro, bloqueo de la app con PIN (hash SHA-256 en `localStorage`, sin enviar nada a ningún servidor), gestión simple de cuentas, datos de ejemplo, exportar/importar copia de seguridad en JSON, borrar todos los datos.
 - Selector de mes/año con navegación ← → en todas las pantallas con datos temporales.
 - PWA instalable con manifest + service worker (cache del app shell para uso offline).
@@ -35,7 +39,7 @@ Para instalarla como app: abre el sitio en Chrome/Edge (Android/desktop) o Safar
 
 ## Roadmap (v2 — no implementado aún)
 
-- Pantallas **Resumen** (histórico mensual), **Estadística** (desglose detallado ingresos/gastos por categoría) y **Diagrama** (barras/circular con toggle de porcentaje) y **Calendario**.
+- Proyección automática de transacciones recurrentes hacia meses futuros (hoy `recurring` se guarda pero no se repite solo).
 - Importación de transacciones vía **CSV** (bancos) y exportación a **Excel/HTML/CSV**.
 - **Conciliación bancaria** (marcar transacciones como conciliadas contra el extracto).
 - **Copias de seguridad automáticas** (programadas), además de la exportación manual ya disponible.
@@ -61,10 +65,15 @@ cuentas-claras/
 │   ├── db.js            # capa de datos IndexedDB + seed
 │   ├── format.js         # helpers de moneda/fecha
 │   ├── charts.js          # gráfico circular (donut) y de barras, sin dependencias
+│   ├── analytics.js        # helpers de agregación (saldo acumulado, agrupación por categoría)
 │   ├── crypto.js           # hash SHA-256 para el PIN
 │   └── screens/
 │       ├── inicio.js
 │       ├── movimientos.js
+│       ├── resumen.js
+│       ├── estadistica.js
+│       ├── diagrama.js
+│       ├── calendario.js
 │       ├── presupuestos.js
 │       ├── objetivos.js
 │       └── ajustes.js

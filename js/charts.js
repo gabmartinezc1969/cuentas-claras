@@ -1,6 +1,6 @@
 import { money } from './format.js';
 
-export function renderDonut(data) {
+export function renderDonut(data, opts = {}) {
   const total = data.reduce((sum, d) => sum + d.value, 0);
   if (total <= 0) {
     return '<div class="empty-state">Sin datos para graficar este período.</div>';
@@ -18,7 +18,7 @@ export function renderDonut(data) {
     <div class="legend-item">
       <span class="legend-dot" style="background:${d.color}"></span>
       <span>${d.label}</span>
-      <span class="amount">${money(d.value)}</span>
+      <span class="amount">${opts.percent ? `${((d.value / total) * 100).toFixed(1)}%` : money(d.value)}</span>
     </div>
   `).join('');
 
@@ -30,16 +30,18 @@ export function renderDonut(data) {
   `;
 }
 
-export function renderBars(data) {
+export function renderBars(data, opts = {}) {
   if (data.length === 0) {
     return '<div class="empty-state">Sin datos para graficar este período.</div>';
   }
   const max = Math.max(...data.map((d) => d.value));
+  const total = data.reduce((sum, d) => sum + d.value, 0);
   const cols = data.map((d) => {
     const heightPct = max > 0 ? Math.max((d.value / max) * 100, 4) : 4;
+    const label = opts.percent ? `${total > 0 ? ((d.value / total) * 100).toFixed(1) : 0}%` : money(d.value);
     return `
       <div class="bar-col">
-        <div class="bar-val">${money(d.value)}</div>
+        <div class="bar-val">${label}</div>
         <div class="bar-fill" style="height:${heightPct}%; background:${d.color}"></div>
         <div class="bar-label">${d.label}</div>
       </div>

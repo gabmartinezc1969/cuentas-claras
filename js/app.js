@@ -1,6 +1,11 @@
 import * as db from './db.js';
 import { money, MONTH_NAMES, overlapsMonth, inMonth } from './format.js';
 import { sha256 } from './crypto.js';
+import { accountsInitialSum } from './analytics.js';
+import { renderResumen } from './screens/resumen.js';
+import { renderEstadistica } from './screens/estadistica.js';
+import { renderDiagrama } from './screens/diagrama.js';
+import { renderCalendario } from './screens/calendario.js';
 import { renderInicio } from './screens/inicio.js';
 import { renderMovimientos } from './screens/movimientos.js';
 import { renderPresupuestos } from './screens/presupuestos.js';
@@ -35,6 +40,10 @@ const el = {
 const SCREENS = {
   inicio: { title: 'Cuentas Claras', render: renderInicio, showPeriod: true, showFab: true },
   movimientos: { title: 'Movimientos', render: renderMovimientos, showPeriod: true, showFab: true },
+  resumen: { title: 'Resumen', render: renderResumen, showPeriod: false, showFab: false },
+  estadistica: { title: 'Estadística', render: renderEstadistica, showPeriod: true, showFab: true },
+  diagrama: { title: 'Diagrama', render: renderDiagrama, showPeriod: true, showFab: false },
+  calendario: { title: 'Calendario', render: renderCalendario, showPeriod: true, showFab: true },
   presupuestos: { title: 'Presupuestos', render: renderPresupuestos, showPeriod: true, showFab: true },
   objetivos: { title: 'Objetivos de ahorro', render: renderObjetivos, showPeriod: true, showFab: true },
   ajustes: { title: 'Ajustes', render: renderAjustes, showPeriod: false, showFab: false },
@@ -312,7 +321,7 @@ async function openGoalModal(existing) {
 
 async function computeFooterTotals() {
   const [transactions, accounts] = await Promise.all([db.getAll('transactions'), db.getAll('accounts')]);
-  const initial = accounts.reduce((sum, a) => sum + (a.initialBalance || 0), 0);
+  const initial = accountsInitialSum(accounts);
   const currentBalance = initial + transactions.reduce(
     (sum, t) => sum + (t.type === 'income' ? t.amount : -t.amount), 0,
   );

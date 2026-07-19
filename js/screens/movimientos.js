@@ -1,4 +1,5 @@
 import { formatDayHeader } from '../format.js';
+import { cumulativeBalanceByDate, accountsInitialSum } from '../analytics.js';
 
 export async function renderMovimientos(container, ctx) {
   const { db, money, inMonth, year, month, openTransactionModal } = ctx;
@@ -16,13 +17,7 @@ export async function renderMovimientos(container, ctx) {
     return parent ? `${parent.name} (${c.name})` : c.name;
   };
 
-  const sorted = [...allTx].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.id - b.id)));
-  let running = 0;
-  const cumulativeByDate = {};
-  for (const t of sorted) {
-    running += t.type === 'income' ? t.amount : -t.amount;
-    cumulativeByDate[t.date] = running;
-  }
+  const cumulativeByDate = cumulativeBalanceByDate(allTx, accountsInitialSum(accounts));
 
   const periodTx = allTx.filter((t) => inMonth(t.date, year, month));
   const dates = Array.from(new Set(periodTx.map((t) => t.date))).sort().reverse();
