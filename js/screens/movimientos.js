@@ -5,6 +5,8 @@ function sourceIdOf(t) {
   return typeof t.id === 'string' ? Number(t.id.split(':')[0]) : t.id;
 }
 
+const localState = { reconciledFilter: 'all' };
+
 export async function renderMovimientos(container, ctx) {
   const { db, money, year, month, openTransactionModal } = ctx;
   const [allTx, categories, accounts] = await Promise.all([
@@ -23,11 +25,26 @@ export async function renderMovimientos(container, ctx) {
 
   const cumulativeByDate = cumulativeBalanceByDate(allTx, accountsInitialSum(accounts));
 
-  const periodTx = expandRecurringForMonth(allTx, year, month);
+  const monthTx = expandRecurringForMonth(allTx, year, month);
+  const periodTx = monthTx.filter((t) => {
+    if (localState.reconciledFilter === 'reconciled') return !!t.reconciled;
+    if (localState.reconciledFilter === 'pending') return !t.reconciled;
+    return true;
+  });
+
+  const filterBar = `
+    <div class="segmented" id="reconciled-filter" style="margin-bottom:12px">
+      <button type="button" class="filter-opt ${localState.reconciledFilter === 'all' ? 'active neutral' : ''}" data-filter="all">Todas</button>
+      <button type="button" class="filter-opt ${localState.reconciledFilter === 'reconciled' ? 'active neutral' : ''}" data-filter="reconciled">Conciliadas</button>
+      <button type="button" class="filter-opt ${localState.reconciledFilter === 'pending' ? 'active neutral' : ''}" data-filter="pending">Pendientes</button>
+    </div>
+  `;
+
   const dates = Array.from(new Set(periodTx.map((t) => t.date))).sort().reverse();
 
   if (dates.length === 0) {
-    container.innerHTML = '<div class="empty-state">No hay movimientos en este período.<br/>Toca "+" para agregar el primero.</div>';
+    container.innerHTML = `${filterBar}<div class="empty-state">No hay movimientos${localState.reconciledFilter !== 'all' ? ' con este filtro' : ''} en este período.${localState.reconciledFilter === 'all' ? '<br/>Toca "+" para agregar el primero.' : ''}</div>`;
+    wireFilterBar(container, ctx);
     return;
   }
 
@@ -40,8 +57,8 @@ export async function renderMovimientos(container, ctx) {
     const items = dayTx.map((t) => `
       <div class="tx-item" data-tx-id="${t.id}">
         <div class="tx-main">
-          <div class="tx-name">${t.recurring && t.recurring !== 'none' ? '🔁 ' : ''}${t.note || catLabel(t.categoryId)}</div>
-          <div class="tx-cat">${catLabel(t.categoryId)}, ${accById[t.accountId]?.name || ''}${t.reconciled ? ' · ✓ conciliada' : ''}</div>
+          <div class="tx-name">${t.recurring && t.recurring !== 'none' ? '🔁 ' : ''}${t.receiptPhoto ? '📷 ' : ''}${t.note || catLabel(t.categoryId)}</div>
+          <div class="tx-cat">${catLabel(t.categoryId)}, ${accById[t.accountId]?.name || ''}${t.reconciled ? ' · ✓ conciliada' : ''}${t.splitGroupId ? ' · dividida' : ''}</div>
         </div>
         <div class="tx-amt ${t.type === 'income' ? 'positive' : 'negative'}">
           ${t.type === 'income' ? '+' : '-'}${money(t.amount)}
@@ -67,11 +84,21 @@ export async function renderMovimientos(container, ctx) {
     `;
   }).join('');
 
-  container.innerHTML = groups;
+  container.innerHTML = filterBar + groups;
 
   container.querySelectorAll('.tx-item').forEach((item) => {
     item.addEventListener('click', () => {
       openTransactionModal(byId.get(item.dataset.txId));
+    });
+  });
+  wireFilterBar(container, ctx);
+}
+
+function wireFilterBar(container, ctx) {
+  container.querySelectorAll('.filter-opt').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      localState.reconciledFilter = btn.dataset.filter;
+      renderMovimientos(container, ctx);
     });
   });
 }

@@ -33,25 +33,26 @@ Para instalarla como app: abre el sitio en Chrome/Edge (Android/desktop) o Safar
 - **Diagrama**: gráfico de barras y circular por categoría, con sub-tabs y toggle "Mostrar porcentaje".
 - **Calendario**: grid mensual con el neto de cada día; al tocar un día se listan sus transacciones.
 - **Transacciones recurrentes**: una transacción puede marcarse "Cada semana" o "Mensualmente"; sus repeticiones futuras (y pasadas) se proyectan automáticamente en Movimientos, Inicio, Estadística, Diagrama, Calendario y en el cálculo de "gastado" de Presupuestos, sin necesidad de crear una fila por período. Se muestran con el ícono 🔁. Editar o borrar la transacción afecta a todas sus repeticiones (no hay edición de una ocurrencia individual todavía).
-- **Conciliación bancaria**: cada transacción puede marcarse como "Conciliada con el banco" desde su formulario; se indica con "✓ conciliada" en Movimientos. (Aún no hay un filtro dedicado para ver solo conciliadas/pendientes.)
+- **Conciliación bancaria**: cada transacción puede marcarse como "Conciliada con el banco" desde su formulario; se indica con "✓ conciliada" en Movimientos, que además tiene un filtro Todas / Conciliadas / Pendientes.
+- **Transacciones divididas**: al crear una transacción nueva, "Dividir en varias categorías" permite repartir un mismo gasto/ingreso entre 2 o más categorías; se guardan como transacciones independientes ligadas por un `splitGroupId` común (editar una parte solo afecta a esa línea).
+- **Plantillas**: desde el formulario de una transacción se puede "Guardar como plantilla"; al crear una nueva transacción se puede elegir una plantilla para prellenar tipo/monto/categoría/cuenta/nota. Se gestionan (listar/borrar) desde Ajustes.
+- **Fotos de recibos**: cada transacción admite adjuntar una foto (input de archivo/cámara), guardada como `dataURL` en IndexedDB; se ve como miniatura al editar y con un ícono 📷 en Movimientos.
+- **Recordatorios**: alta/baja/marcar-hecho desde Ajustes; los que vencen en los próximos 7 días aparecen en una tarjeta en Inicio. Si el usuario activa las notificaciones del navegador, los recordatorios vencidos disparan una `Notification` mientras la app está abierta (no hay servidor push, así que no llegan con la app cerrada).
+- **Copia de seguridad automática**: tras cada cambio se guarda (con un pequeño debounce) una foto completa de los datos en un store interno de IndexedDB; Ajustes muestra la fecha de la última copia y permite restaurarla. No reemplaza la exportación manual en JSON/CSV, que sigue siendo la única forma de sacar una copia fuera del dispositivo.
 - **Importar/Exportar CSV** de transacciones desde Ajustes, además del backup completo en JSON. El CSV usa el formato propio de la app (columnas: Fecha, Tipo, Monto, Categoria, Cuenta, Nota, Recurrencia, Conciliada); no incluye parsers para formatos bancarios de terceros.
 - **Ajustes**: modo claro/oscuro, bloqueo de la app con PIN (hash SHA-256 en `localStorage`, sin enviar nada a ningún servidor), gestión simple de cuentas, datos de ejemplo, exportar/importar copia de seguridad en JSON, exportar/importar transacciones en CSV, borrar todos los datos.
 - Selector de mes/año con navegación ← → en todas las pantallas con datos temporales.
 - PWA instalable con manifest + service worker (cache del app shell para uso offline).
 - Categorías por defecto: Casa (Alquiler, Seguros, Expensas, Internet), Coche (Gasolina, Reparación), Comida y bebida (Alimentos), Ocio, Indumentaria, Electrónica, Otros; e Ingresos (Salario, Subsidio familiar, Intereses).
 
-## Roadmap (v3 — no implementado aún)
+## Roadmap (v4 — no implementado aún)
 
 - Exportación a **Excel/HTML** (hoy solo CSV y JSON).
 - Soporte de importación para formatos CSV específicos de bancos (hoy solo el formato propio de exportación).
-- Filtro dedicado de "conciliadas / pendientes" en Movimientos.
-- **Copias de seguridad automáticas** (programadas), además de la exportación manual ya disponible.
 - **Biometría** (WebAuthn) como alternativa al PIN.
-- **Transacciones divididas** (un recibo repartido en varias categorías).
-- **Plantillas** de transacciones y entrada rápida vía widget / atajo del ícono.
-- **Fotos de recibos** adjuntas a una transacción.
-- **Recordatorios** de gastos próximos (Notifications API).
-- Edición de una única ocurrencia de una transacción recurrente (hoy editar/borrar afecta a todas).
+- Entrada rápida vía widget de pantalla de inicio / atajo del ícono de la app (no aplicable a una PWA sin APIs nativas; requeriría empaquetado nativo, p. ej. con Capacitor/Trusted Web Activity).
+- Notificaciones de recordatorios con la app cerrada (requeriría un servidor de push; hoy solo funciona con la app abierta).
+- Edición de una única ocurrencia de una transacción recurrente (hoy editar/borrar afecta a todas) y edición de una transacción dividida completa desde un solo formulario (hoy cada línea se edita por separado).
 - Edición de categorías/subcategorías desde la UI (hoy son fijas, definidas en `js/db.js`).
 - Colores personalizables por el usuario (hoy son fijos vía variables CSS en `css/styles.css`).
 

@@ -123,6 +123,15 @@ async function accountOptions(selectedId, includeEmpty) {
   return options;
 }
 
+function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 async function openTransactionModal(existing) {
   if (existing && existing.virtual) {
     existing = await db.getById('transactions', existing.sourceId);
@@ -133,24 +142,56 @@ async function openTransactionModal(existing) {
     income: await categoryOptions('income'),
   };
   const accountsHtml = await accountOptions(existing ? existing.accountId : null, false);
+  const templates = existing ? [] : await db.getAll('templates');
   const today = new Date().toISOString().slice(0, 10);
+  let photoData = existing ? (existing.receiptPhoto || null) : null;
+
+  const templateOptions = templates.length
+    ? `<div class="field">
+        <label>Plantilla</label>
+        <select id="tpl-select">
+          <option value="">— Ninguna —</option>
+          ${templates.map((tpl) => `<option value="${tpl.id}">${tpl.name}</option>`).join('')}
+        </select>
+      </div>`
+    : '';
 
   openModal(`
     <h2>${existing ? 'Editar' : 'Nueva'} transacción</h2>
+    ${existing && existing.splitGroupId ? '<p style="font-size:12px;color:var(--text-muted)">Esta transacción es parte de una compra dividida en varias categorías. Solo se edita esta parte.</p>' : ''}
+    ${templateOptions}
     <div class="segmented" id="type-toggle">
       <button type="button" class="type-opt ${type === 'expense' ? 'active expense' : ''}" data-type="expense">Gasto</button>
       <button type="button" class="type-opt ${type === 'income' ? 'active income' : ''}" data-type="income">Ingreso</button>
     </div>
     <form id="tx-form">
-      <div class="field" style="margin-top:14px">
-        <label>Monto</label>
-        <input type="number" step="0.01" min="0" name="amount" required value="${existing ? existing.amount : ''}" />
+      ${!existing ? `
+      <div class="settings-row" style="padding:10px 0 0">
+        <span>Dividir en varias categorías</span>
+        <label class="switch">
+          <input type="checkbox" id="split-toggle" />
+          <span class="slider"></span>
+        </label>
+      </div>` : ''}
+      <div id="single-fields">
+        <div class="field" style="margin-top:14px">
+          <label>Monto</label>
+          <input type="number" step="0.01" min="0" name="amount" id="tx-amount" required value="${existing ? existing.amount : ''}" />
+        </div>
+        <div class="field">
+          <label>Categoría</label>
+          <select name="categoryId" id="tx-category">
+            ${categoriesHtml[type]}
+          </select>
+        </div>
       </div>
-      <div class="field">
-        <label>Categoría</label>
-        <select name="categoryId" id="tx-category">
-          ${categoriesHtml[type]}
-        </select>
+      <div id="split-fields" style="display:none">
+        <div id="split-rows"></div>
+        <button type="button" class="btn btn-outline" id="split-add" style="margin:6px 0">+ Agregar categoría</button>
+        <div class="progress-figures" style="margin-bottom:10px">
+          <span>Total dividido</span>
+          <span id="split-total">$0.00</span>
+        </div>
       </div>
       <div class="field">
         <label>Cuenta</label>
@@ -166,7 +207,7 @@ async function openTransactionModal(existing) {
       </div>
       <div class="field">
         <label>Recurrencia</label>
-        <select name="recurring">
+        <select name="recurring" id="tx-recurring">
           <option value="none" ${!existing || existing.recurring === 'none' || !existing.recurring ? 'selected' : ''}>Única vez</option>
           <option value="weekly" ${existing && existing.recurring === 'weekly' ? 'selected' : ''}>Cada semana</option>
           <option value="monthly" ${existing && existing.recurring === 'monthly' ? 'selected' : ''}>Mensualmente</option>
@@ -182,40 +223,191 @@ async function openTransactionModal(existing) {
           <span class="slider"></span>
         </label>
       </div>
+      <div class="field">
+        <label>Foto del recibo</label>
+        <input type="file" accept="image/*" id="tx-photo-input" />
+        <div id="tx-photo-preview" style="margin-top:8px"></div>
+      </div>
       <div class="btn-row">
         ${existing ? '<button type="button" class="btn btn-danger" id="tx-delete">Eliminar</button>' : ''}
         <button type="submit" class="btn btn-primary">Guardar</button>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="btn btn-outline" id="tx-save-template">Guardar como plantilla</button>
       </div>
     </form>
   `, (root) => {
     let currentType = type;
     const catSelect = root.querySelector('#tx-category');
+    const amountInput = root.querySelector('#tx-amount');
+    const splitToggle = root.querySelector('#split-toggle');
+    const splitFields = root.querySelector('#split-fields');
+    const singleFields = root.querySelector('#single-fields');
+    const splitRows = root.querySelector('#split-rows');
+    const splitTotalEl = root.querySelector('#split-total');
+    const photoInput = root.querySelector('#tx-photo-input');
+    const photoPreview = root.querySelector('#tx-photo-preview');
+
+    function renderPhotoPreview() {
+      photoPreview.innerHTML = photoData
+        ? `<div style="display:flex;align-items:center;gap:10px">
+             <img src="${photoData}" style="width:56px;height:56px;object-fit:cover;border-radius:8px;border:1px solid var(--border)" />
+             <button type="button" class="btn btn-outline" id="tx-photo-remove" style="width:auto;padding:6px 10px">Quitar foto</button>
+           </div>`
+        : '';
+      const removeBtn = photoPreview.querySelector('#tx-photo-remove');
+      if (removeBtn) removeBtn.addEventListener('click', () => { photoData = null; renderPhotoPreview(); });
+    }
+    renderPhotoPreview();
+
+    photoInput.addEventListener('change', async () => {
+      const file = photoInput.files[0];
+      if (!file) return;
+      photoData = await fileToDataURL(file);
+      renderPhotoPreview();
+    });
+
+    function addSplitRow(catId, amt) {
+      const row = document.createElement('div');
+      row.className = 'split-row';
+      row.style.cssText = 'display:flex;gap:8px;margin-bottom:8px;align-items:center';
+      row.innerHTML = `
+        <select class="split-cat" style="flex:2">${categoriesHtml[currentType]}</select>
+        <input type="number" step="0.01" min="0" class="split-amt" placeholder="Monto" style="flex:1" />
+        <button type="button" class="icon-btn split-remove">✕</button>
+      `;
+      if (catId) row.querySelector('.split-cat').value = catId;
+      if (amt) row.querySelector('.split-amt').value = amt;
+      row.querySelector('.split-amt').addEventListener('input', updateSplitTotal);
+      row.querySelector('.split-remove').addEventListener('click', () => { row.remove(); updateSplitTotal(); });
+      splitRows.appendChild(row);
+    }
+
+    function updateSplitTotal() {
+      const total = Array.from(splitRows.querySelectorAll('.split-amt'))
+        .reduce((s, input) => s + (parseFloat(input.value) || 0), 0);
+      splitTotalEl.textContent = money(total);
+    }
+
+    function setSplitCategoryOptions() {
+      splitRows.querySelectorAll('.split-cat').forEach((sel) => {
+        const current = sel.value;
+        sel.innerHTML = categoriesHtml[currentType];
+        if (current) sel.value = current;
+      });
+    }
+
+    if (splitToggle) {
+      splitToggle.addEventListener('change', () => {
+        const isSplit = splitToggle.checked;
+        singleFields.style.display = isSplit ? 'none' : '';
+        splitFields.style.display = isSplit ? '' : 'none';
+        amountInput.required = !isSplit;
+        if (isSplit && splitRows.children.length === 0) {
+          addSplitRow();
+          addSplitRow();
+          updateSplitTotal();
+        }
+      });
+      root.querySelector('#split-add').addEventListener('click', () => { addSplitRow(); updateSplitTotal(); });
+    }
+
     root.querySelectorAll('.type-opt').forEach((btn) => {
       btn.addEventListener('click', () => {
         currentType = btn.dataset.type;
         root.querySelectorAll('.type-opt').forEach((b) => b.classList.remove('active', 'income', 'expense'));
         btn.classList.add('active', currentType);
         catSelect.innerHTML = categoriesHtml[currentType];
+        setSplitCategoryOptions();
       });
     });
+
+    const tplSelect = root.querySelector('#tpl-select');
+    if (tplSelect) {
+      tplSelect.addEventListener('change', () => {
+        const tpl = templates.find((t) => String(t.id) === tplSelect.value);
+        if (!tpl) return;
+        currentType = tpl.type;
+        root.querySelectorAll('.type-opt').forEach((b) => {
+          b.classList.remove('active', 'income', 'expense');
+          if (b.dataset.type === tpl.type) b.classList.add('active', tpl.type);
+        });
+        catSelect.innerHTML = categoriesHtml[currentType];
+        catSelect.value = tpl.categoryId;
+        amountInput.value = tpl.amount;
+        root.querySelector('select[name="accountId"]').value = tpl.accountId;
+        root.querySelector('input[name="note"]').value = tpl.note || '';
+      });
+    }
+
     if (existing) {
       root.querySelector('#tx-delete').addEventListener('click', () => confirmDelete('transactions', existing.id, 'Se eliminará esta transacción.'));
     }
+
+    root.querySelector('#tx-save-template').addEventListener('click', async () => {
+      if (splitToggle && splitToggle.checked) {
+        alert('Las plantillas no son compatibles con transacciones divididas.');
+        return;
+      }
+      const name = prompt('Nombre de la plantilla:');
+      if (!name) return;
+      const accountId = parseInt(root.querySelector('select[name="accountId"]').value, 10);
+      await db.put('templates', {
+        name,
+        type: currentType,
+        amount: parseFloat(amountInput.value) || 0,
+        categoryId: parseInt(catSelect.value, 10),
+        accountId,
+        note: root.querySelector('input[name="note"]').value,
+      });
+      alert('Plantilla guardada.');
+    });
+
     root.querySelector('#tx-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
-      const record = {
-        type: currentType,
-        amount: parseFloat(fd.get('amount')),
-        categoryId: parseInt(fd.get('categoryId'), 10),
+      const common = {
         accountId: parseInt(fd.get('accountId'), 10),
         date: fd.get('date'),
         note: fd.get('note'),
-        recurring: fd.get('recurring') || 'none',
         reconciled: fd.get('reconciled') === 'on',
+        receiptPhoto: photoData,
       };
-      if (existing) record.id = existing.id;
-      await db.put('transactions', record);
+
+      if (splitToggle && splitToggle.checked) {
+        const rows = Array.from(splitRows.querySelectorAll('.split-row')).map((row) => ({
+          categoryId: parseInt(row.querySelector('.split-cat').value, 10),
+          amount: parseFloat(row.querySelector('.split-amt').value),
+        })).filter((r) => r.categoryId && r.amount > 0);
+        if (rows.length < 2) {
+          alert('Agrega al menos 2 categorías con monto para dividir la transacción.');
+          return;
+        }
+        const splitGroupId = `split-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        for (const r of rows) {
+          await db.put('transactions', {
+            ...common,
+            type: currentType,
+            amount: r.amount,
+            categoryId: r.categoryId,
+            recurring: 'none',
+            splitGroupId,
+          });
+        }
+      } else {
+        const record = {
+          ...common,
+          type: currentType,
+          amount: parseFloat(fd.get('amount')),
+          categoryId: parseInt(fd.get('categoryId'), 10),
+          recurring: fd.get('recurring') || 'none',
+        };
+        if (existing) {
+          record.id = existing.id;
+          if (existing.splitGroupId) record.splitGroupId = existing.splitGroupId;
+        }
+        await db.put('transactions', record);
+      }
       closeModal();
       refresh();
     });
@@ -399,6 +591,19 @@ async function refresh() {
 
   await screen.render(el.main, ctx());
   await updateFooter();
+  scheduleAutobackup();
+}
+
+const AUTOBACKUP_STORES = ['accounts', 'categories', 'transactions', 'budgets', 'goals', 'templates', 'reminders'];
+let autobackupTimer = null;
+
+function scheduleAutobackup() {
+  clearTimeout(autobackupTimer);
+  autobackupTimer = setTimeout(async () => {
+    const dump = {};
+    for (const s of AUTOBACKUP_STORES) dump[s] = await db.getAll(s);
+    await db.put('autobackup', { id: 1, timestamp: Date.now(), data: dump });
+  }, 1500);
 }
 
 el.tabbar.addEventListener('click', (e) => {
@@ -452,6 +657,20 @@ function showLockScreen(storedHash) {
   pinInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
 }
 
+async function notifyDueReminders() {
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+  const today = new Date().toISOString().slice(0, 10);
+  const reminders = await db.getAll('reminders');
+  const notifiedKey = `cc-notified-${today}`;
+  const alreadyNotified = new Set(JSON.parse(sessionStorage.getItem(notifiedKey) || '[]'));
+  const due = reminders.filter((r) => !r.done && r.dueDate <= today && !alreadyNotified.has(r.id));
+  for (const r of due) {
+    new Notification('Cuentas Claras — recordatorio', { body: `${r.note}: ${money(r.amount)} (${r.dueDate})` });
+    alreadyNotified.add(r.id);
+  }
+  if (due.length) sessionStorage.setItem(notifiedKey, JSON.stringify(Array.from(alreadyNotified)));
+}
+
 async function boot() {
   await db.openDB();
   await db.ensureSeeded();
@@ -459,6 +678,7 @@ async function boot() {
   state.tab = 'inicio';
   el.tabbar.querySelector('[data-tab="inicio"]').classList.add('active');
   await refresh();
+  notifyDueReminders();
 }
 
 const lockHash = localStorage.getItem('cc-pin-hash');
