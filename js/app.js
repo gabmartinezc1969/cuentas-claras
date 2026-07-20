@@ -2,6 +2,13 @@ import * as db from './db.js';
 import { money, MONTH_NAMES, overlapsMonth, inMonth } from './format.js';
 import { sha256 } from './crypto.js';
 import { accountsInitialSum } from './analytics.js';
+import {
+  isSupported as isWebAuthnSupported,
+  isRegistered as isWebAuthnRegistered,
+  register as webauthnRegister,
+  unregister as webauthnUnregister,
+  authenticate as webauthnAuthenticate,
+} from './webauthn.js';
 import { renderResumen } from './screens/resumen.js';
 import { renderEstadistica } from './screens/estadistica.js';
 import { renderDiagrama } from './screens/diagrama.js';
@@ -52,6 +59,21 @@ const SCREENS = {
 function applyTheme() {
   document.documentElement.setAttribute('data-theme', state.theme);
   localStorage.setItem('cc-theme', state.theme);
+}
+
+function applyCustomColors() {
+  const header = localStorage.getItem('cc-color-header');
+  const accent = localStorage.getItem('cc-color-accent');
+  const root = document.documentElement.style;
+  if (header) { root.setProperty('--header-start', header); root.setProperty('--header-end', header); } else { root.removeProperty('--header-start'); root.removeProperty('--header-end'); }
+  if (accent) root.setProperty('--accent', accent); else root.removeProperty('--accent');
+}
+
+function setCustomColors(header, accent) {
+  if (header) localStorage.setItem('cc-color-header', header); else localStorage.removeItem('cc-color-header');
+  if (accent) localStorage.setItem('cc-color-accent', accent); else localStorage.removeItem('cc-color-accent');
+  applyCustomColors();
+  refresh();
 }
 
 el.btnTheme.addEventListener('click', () => {
@@ -132,19 +154,24 @@ function fileToDataURL(file) {
   });
 }
 
-async function openTransactionModal(existing) {
-  if (existing && existing.virtual) {
-    existing = await db.getById('transactions', existing.sourceId);
-  }
-  const type = existing ? existing.type : 'expense';
+async function openTransactionModal(existingOrOccurrence) {
+  const occurrenceRecord = existingOrOccurrence && existingOrOccurrence.virtual ? existingOrOccurrence : null;
+  const sourceRecord = occurrenceRecord
+    ? await db.getById('transactions', occurrenceRecord.sourceId)
+    : existingOrOccurrence;
+  let scope = occurrenceRecord ? 'occurrence' : 'all';
+  const existing = sourceRecord;
+  const formSource = () => (scope === 'occurrence' && occurrenceRecord ? occurrenceRecord : sourceRecord);
+
+  const type = existing ? formSource().type : 'expense';
   const categoriesHtml = {
     expense: await categoryOptions('expense'),
     income: await categoryOptions('income'),
   };
-  const accountsHtml = await accountOptions(existing ? existing.accountId : null, false);
+  const accountsHtml = await accountOptions(existing ? formSource().accountId : null, false);
   const templates = existing ? [] : await db.getAll('templates');
   const today = new Date().toISOString().slice(0, 10);
-  let photoData = existing ? (existing.receiptPhoto || null) : null;
+  let photoData = existing ? (formSource().receiptPhoto || null) : null;
 
   const templateOptions = templates.length
     ? `<div class="field">
@@ -156,9 +183,20 @@ async function openTransactionModal(existing) {
       </div>`
     : '';
 
+  const scopeToggle = occurrenceRecord ? `
+    <div class="settings-row" style="padding:6px 0">
+      <span>Aplicar cambios a</span>
+    </div>
+    <div class="segmented" id="scope-toggle">
+      <button type="button" class="scope-opt active neutral" data-scope="occurrence">Solo esta repetición</button>
+      <button type="button" class="scope-opt" data-scope="all">Todas las repeticiones</button>
+    </div>
+  ` : '';
+
   openModal(`
     <h2>${existing ? 'Editar' : 'Nueva'} transacción</h2>
     ${existing && existing.splitGroupId ? '<p style="font-size:12px;color:var(--text-muted)">Esta transacción es parte de una compra dividida en varias categorías. Solo se edita esta parte.</p>' : ''}
+    ${scopeToggle}
     ${templateOptions}
     <div class="segmented" id="type-toggle">
       <button type="button" class="type-opt ${type === 'expense' ? 'active expense' : ''}" data-type="expense">Gasto</button>
@@ -176,7 +214,7 @@ async function openTransactionModal(existing) {
       <div id="single-fields">
         <div class="field" style="margin-top:14px">
           <label>Monto</label>
-          <input type="number" step="0.01" min="0" name="amount" id="tx-amount" required value="${existing ? existing.amount : ''}" />
+          <input type="number" step="0.01" min="0" name="amount" id="tx-amount" required value="${existing ? formSource().amount : ''}" />
         </div>
         <div class="field">
           <label>Categoría</label>
@@ -199,13 +237,13 @@ async function openTransactionModal(existing) {
       </div>
       <div class="field">
         <label>Fecha</label>
-        <input type="date" name="date" required value="${existing ? existing.date : today}" />
+        <input type="date" name="date" id="tx-date" required value="${existing ? formSource().date : today}" ${occurrenceRecord ? 'readonly' : ''} />
       </div>
       <div class="field">
         <label>Nota</label>
-        <input type="text" name="note" placeholder="Descripción" value="${existing ? (existing.note || '') : ''}" />
+        <input type="text" name="note" placeholder="Descripción" value="${existing ? (formSource().note || '') : ''}" />
       </div>
-      <div class="field">
+      <div class="field" id="recurring-field" style="${occurrenceRecord ? 'display:none' : ''}">
         <label>Recurrencia</label>
         <select name="recurring" id="tx-recurring">
           <option value="none" ${!existing || existing.recurring === 'none' || !existing.recurring ? 'selected' : ''}>Única vez</option>
@@ -213,13 +251,13 @@ async function openTransactionModal(existing) {
           <option value="monthly" ${existing && existing.recurring === 'monthly' ? 'selected' : ''}>Mensualmente</option>
         </select>
         ${existing && existing.recurring && existing.recurring !== 'none'
-          ? '<p style="font-size:12px;color:var(--text-muted);margin:6px 0 0">Esta transacción se repite automáticamente. Editarla o eliminarla afecta a todas sus repeticiones.</p>'
+          ? '<p style="font-size:12px;color:var(--text-muted);margin:6px 0 0">Esta transacción se repite automáticamente.</p>'
           : ''}
       </div>
       <div class="settings-row" style="padding:6px 0">
         <span>Conciliada con el banco</span>
         <label class="switch">
-          <input type="checkbox" name="reconciled" ${existing && existing.reconciled ? 'checked' : ''} />
+          <input type="checkbox" name="reconciled" ${existing && formSource().reconciled ? 'checked' : ''} />
           <span class="slider"></span>
         </label>
       </div>
@@ -229,7 +267,7 @@ async function openTransactionModal(existing) {
         <div id="tx-photo-preview" style="margin-top:8px"></div>
       </div>
       <div class="btn-row">
-        ${existing ? '<button type="button" class="btn btn-danger" id="tx-delete">Eliminar</button>' : ''}
+        ${existing ? `<button type="button" class="btn btn-danger" id="tx-delete">${occurrenceRecord ? 'Eliminar esta repetición' : 'Eliminar'}</button>` : ''}
         <button type="submit" class="btn btn-primary">Guardar</button>
       </div>
       <div class="btn-row">
@@ -239,6 +277,7 @@ async function openTransactionModal(existing) {
   `, (root) => {
     let currentType = type;
     const catSelect = root.querySelector('#tx-category');
+    if (existing) catSelect.value = formSource().categoryId;
     const amountInput = root.querySelector('#tx-amount');
     const splitToggle = root.querySelector('#split-toggle');
     const splitFields = root.querySelector('#split-fields');
@@ -247,6 +286,37 @@ async function openTransactionModal(existing) {
     const splitTotalEl = root.querySelector('#split-total');
     const photoInput = root.querySelector('#tx-photo-input');
     const photoPreview = root.querySelector('#tx-photo-preview');
+    const recurringField = root.querySelector('#recurring-field');
+    const dateInput = root.querySelector('#tx-date');
+    const deleteBtn = root.querySelector('#tx-delete');
+
+    if (occurrenceRecord) {
+      root.querySelectorAll('.scope-opt').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          scope = btn.dataset.scope;
+          root.querySelectorAll('.scope-opt').forEach((b) => b.classList.remove('active', 'neutral'));
+          btn.classList.add('active', 'neutral');
+          const values = formSource();
+          currentType = values.type;
+          root.querySelectorAll('.type-opt').forEach((b) => {
+            b.classList.remove('active', 'income', 'expense');
+            if (b.dataset.type === values.type) b.classList.add('active', values.type);
+          });
+          catSelect.innerHTML = categoriesHtml[currentType];
+          catSelect.value = values.categoryId;
+          amountInput.value = values.amount;
+          root.querySelector('select[name="accountId"]').value = values.accountId;
+          root.querySelector('input[name="note"]').value = values.note || '';
+          root.querySelector('input[name="reconciled"]').checked = !!values.reconciled;
+          dateInput.value = scope === 'all' ? sourceRecord.date : occurrenceRecord.date;
+          dateInput.readOnly = scope === 'occurrence';
+          recurringField.style.display = scope === 'occurrence' ? 'none' : '';
+          photoData = values.receiptPhoto || null;
+          renderPhotoPreview();
+          if (deleteBtn) deleteBtn.textContent = scope === 'occurrence' ? 'Eliminar esta repetición' : 'Eliminar';
+        });
+      });
+    }
 
     function renderPhotoPreview() {
       photoPreview.innerHTML = photoData
@@ -340,8 +410,21 @@ async function openTransactionModal(existing) {
       });
     }
 
-    if (existing) {
-      root.querySelector('#tx-delete').addEventListener('click', () => confirmDelete('transactions', existing.id, 'Se eliminará esta transacción.'));
+    if (existing && deleteBtn) {
+      deleteBtn.addEventListener('click', async () => {
+        if (scope === 'occurrence') {
+          if (!confirm('¿Eliminar solo esta repetición? Las demás no se verán afectadas.')) return;
+          const updated = {
+            ...sourceRecord,
+            exceptions: { ...(sourceRecord.exceptions || {}), [occurrenceRecord.date]: { skip: true } },
+          };
+          await db.put('transactions', updated);
+          closeModal();
+          refresh();
+        } else {
+          confirmDelete('transactions', existing.id, 'Se eliminará esta transacción y, si es recurrente, todas sus repeticiones.');
+        }
+      });
     }
 
     root.querySelector('#tx-save-template').addEventListener('click', async () => {
@@ -394,6 +477,21 @@ async function openTransactionModal(existing) {
             splitGroupId,
           });
         }
+      } else if (occurrenceRecord && scope === 'occurrence') {
+        const override = {
+          type: currentType,
+          amount: parseFloat(fd.get('amount')),
+          categoryId: parseInt(fd.get('categoryId'), 10),
+          accountId: common.accountId,
+          note: common.note,
+          reconciled: common.reconciled,
+          receiptPhoto: common.receiptPhoto,
+        };
+        const updated = {
+          ...sourceRecord,
+          exceptions: { ...(sourceRecord.exceptions || {}), [occurrenceRecord.date]: override },
+        };
+        await db.put('transactions', updated);
       } else {
         const record = {
           ...common,
@@ -405,6 +503,7 @@ async function openTransactionModal(existing) {
         if (existing) {
           record.id = existing.id;
           if (existing.splitGroupId) record.splitGroupId = existing.splitGroupId;
+          if (existing.exceptions) record.exceptions = existing.exceptions;
         }
         await db.put('transactions', record);
       }
@@ -424,7 +523,7 @@ async function openBudgetModal(existing) {
     <form id="budget-form">
       <div class="field">
         <label>Categoría</label>
-        <select name="categoryId">${categoriesHtml}</select>
+        <select name="categoryId" id="budget-category">${categoriesHtml}</select>
       </div>
       <div class="field">
         <label>Cuenta (opcional)</label>
@@ -456,6 +555,7 @@ async function openBudgetModal(existing) {
       </div>
     </form>
   `, (root) => {
+    if (existing) root.querySelector('#budget-category').value = existing.categoryId;
     if (existing) {
       root.querySelector('#budget-delete').addEventListener('click', () => confirmDelete('budgets', existing.id, 'Se eliminará este presupuesto.'));
     }
@@ -563,6 +663,17 @@ function ctx() {
     month: state.month,
     theme: state.theme,
     setTheme,
+    customColors: {
+      header: localStorage.getItem('cc-color-header') || '',
+      accent: localStorage.getItem('cc-color-accent') || '',
+    },
+    setCustomColors,
+    webauthn: {
+      supported: isWebAuthnSupported(),
+      registered: isWebAuthnRegistered(),
+      register: webauthnRegister,
+      unregister: webauthnUnregister,
+    },
     db,
     money,
     overlapsMonth,
@@ -630,31 +741,55 @@ el.fab.addEventListener('click', () => {
   return openTransactionModal(null);
 });
 
-function showLockScreen(storedHash) {
+function showLockScreen() {
+  const storedHash = localStorage.getItem('cc-pin-hash');
+  const bioAvailable = isWebAuthnRegistered();
+
   el.lockRoot.innerHTML = `
     <div class="lock-screen">
       <div style="font-size:40px">🔒</div>
       <h2 style="margin:0">Cuentas Claras</h2>
-      <p>Ingresa tu PIN para continuar</p>
-      <input type="password" inputmode="numeric" maxlength="8" id="lock-pin" autofocus />
+      ${bioAvailable ? '<button class="btn btn-primary" style="width:240px" id="lock-bio">🔓 Desbloquear con biometría</button>' : ''}
+      ${storedHash ? `
+        <p>${bioAvailable ? 'o ingresa tu PIN' : 'Ingresa tu PIN para continuar'}</p>
+        <input type="password" inputmode="numeric" maxlength="8" id="lock-pin" ${bioAvailable ? '' : 'autofocus'} />
+        <button class="btn btn-outline" style="width:200px" id="lock-submit">Desbloquear con PIN</button>
+      ` : ''}
       <div class="lock-error" id="lock-error"></div>
-      <button class="btn btn-primary" style="width:200px" id="lock-submit">Desbloquear</button>
     </div>
   `;
-  const pinInput = document.getElementById('lock-pin');
-  const submit = async () => {
-    const value = pinInput.value;
-    const hash = await sha256(value);
-    if (hash === storedHash) {
-      el.lockRoot.innerHTML = '';
-      boot();
-    } else {
-      document.getElementById('lock-error').textContent = 'PIN incorrecto';
-      pinInput.value = '';
-    }
-  };
-  document.getElementById('lock-submit').addEventListener('click', submit);
-  pinInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+
+  const unlock = () => { el.lockRoot.innerHTML = ''; boot(); };
+
+  const bioBtn = document.getElementById('lock-bio');
+  if (bioBtn) {
+    bioBtn.addEventListener('click', async () => {
+      document.getElementById('lock-error').textContent = '';
+      try {
+        const ok = await webauthnAuthenticate();
+        if (ok) unlock();
+      } catch (err) {
+        document.getElementById('lock-error').textContent = storedHash
+          ? 'No se pudo verificar la biometría. Usa tu PIN.'
+          : 'No se pudo verificar la biometría. Inténtalo de nuevo.';
+      }
+    });
+  }
+
+  if (storedHash) {
+    const pinInput = document.getElementById('lock-pin');
+    const submit = async () => {
+      const hash = await sha256(pinInput.value);
+      if (hash === storedHash) {
+        unlock();
+      } else {
+        document.getElementById('lock-error').textContent = 'PIN incorrecto';
+        pinInput.value = '';
+      }
+    };
+    document.getElementById('lock-submit').addEventListener('click', submit);
+    pinInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+  }
 }
 
 async function notifyDueReminders() {
@@ -675,15 +810,15 @@ async function boot() {
   await db.openDB();
   await db.ensureSeeded();
   applyTheme();
+  applyCustomColors();
   state.tab = 'inicio';
   el.tabbar.querySelector('[data-tab="inicio"]').classList.add('active');
   await refresh();
   notifyDueReminders();
 }
 
-const lockHash = localStorage.getItem('cc-pin-hash');
-if (lockHash) {
-  showLockScreen(lockHash);
+if (localStorage.getItem('cc-pin-hash') || isWebAuthnRegistered()) {
+  showLockScreen();
 } else {
   boot();
 }

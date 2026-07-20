@@ -46,7 +46,7 @@ export function parseCSV(text) {
   return rows.filter((r) => !(r.length === 1 && r[0] === ''));
 }
 
-function categoryLabel(catById, catId) {
+export function categoryLabel(catById, catId) {
   const c = catById[catId];
   if (!c) return '';
   if (c.parentId === null) return c.name;
@@ -54,7 +54,7 @@ function categoryLabel(catById, catId) {
   return parent ? `${parent.name}: ${c.name}` : c.name;
 }
 
-export function transactionsToCSV(transactions, categories, accounts) {
+export function transactionTableData(transactions, categories, accounts) {
   const catById = Object.fromEntries(categories.map((c) => [c.id, c]));
   const accById = Object.fromEntries(accounts.map((a) => [a.id, a]));
   const header = ['Fecha', 'Tipo', 'Monto', 'Categoria', 'Cuenta', 'Nota', 'Recurrencia', 'Conciliada'];
@@ -68,6 +68,11 @@ export function transactionsToCSV(transactions, categories, accounts) {
     t.recurring || 'none',
     t.reconciled ? 'Si' : 'No',
   ]);
+  return { header, rows };
+}
+
+export function transactionsToCSV(transactions, categories, accounts) {
+  const { header, rows } = transactionTableData(transactions, categories, accounts);
   return toCSV([header, ...rows]);
 }
 

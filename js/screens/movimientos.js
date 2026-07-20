@@ -58,7 +58,7 @@ export async function renderMovimientos(container, ctx) {
       <div class="tx-item" data-tx-id="${t.id}">
         <div class="tx-main">
           <div class="tx-name">${t.recurring && t.recurring !== 'none' ? '🔁 ' : ''}${t.receiptPhoto ? '📷 ' : ''}${t.note || catLabel(t.categoryId)}</div>
-          <div class="tx-cat">${catLabel(t.categoryId)}, ${accById[t.accountId]?.name || ''}${t.reconciled ? ' · ✓ conciliada' : ''}${t.splitGroupId ? ' · dividida' : ''}</div>
+          <div class="tx-cat">${catLabel(t.categoryId)}, ${accById[t.accountId]?.name || ''}${t.reconciled ? ' · ✓ conciliada' : ''}${t.splitGroupId ? ' · dividida' : ''}${t.hasException ? ' · modificada' : ''}</div>
         </div>
         <div class="tx-amt ${t.type === 'income' ? 'positive' : 'negative'}">
           ${t.type === 'income' ? '+' : '-'}${money(t.amount)}

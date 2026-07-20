@@ -1,9 +1,44 @@
 import { transactionsToCSV, csvToTransactions } from '../csv.js';
+import { transactionsToXLS, transactionsToHTML } from '../export-formats.js';
 
 const STORES = ['accounts', 'categories', 'transactions', 'budgets', 'goals', 'templates', 'reminders'];
 
+function categoryParentOptions(categories, kind) {
+  const tops = categories.filter((c) => c.kind === kind && c.parentId === null);
+  const options = ['<option value="">— Ninguna (categoría principal) —</option>'];
+  for (const top of tops) options.push(`<option value="${top.id}">${top.name}</option>`);
+  return options.join('');
+}
+
+function renderCategoryList(categories, kind, title) {
+  const tops = categories.filter((c) => c.kind === kind && c.parentId === null);
+  const rows = tops.map((top) => {
+    const children = categories.filter((c) => c.parentId === top.id);
+    const childRows = children.map((c) => `
+      <div class="settings-row" style="padding-left:20px">
+        <span style="display:flex;align-items:center;gap:8px">
+          <input type="color" data-recolor-category="${c.id}" value="${c.color}" style="width:22px;height:22px;border:none;background:none;padding:0" />
+          ${c.name}
+        </span>
+        <button class="icon-btn" data-del-category="${c.id}" title="Eliminar">🗑</button>
+      </div>
+    `).join('');
+    return `
+      <div class="settings-row">
+        <span style="display:flex;align-items:center;gap:8px">
+          <input type="color" data-recolor-category="${top.id}" value="${top.color}" style="width:22px;height:22px;border:none;background:none;padding:0" />
+          <strong>${top.name}</strong>
+        </span>
+        <button class="icon-btn" data-del-category="${top.id}" title="Eliminar">🗑</button>
+      </div>
+      ${childRows}
+    `;
+  }).join('');
+  return `<p style="font-size:12px;color:var(--text-muted);margin:10px 0 4px">${title}</p>${rows || '<p style="font-size:13px;color:var(--text-muted);margin:0">Sin categorías.</p>'}`;
+}
+
 export async function renderAjustes(container, ctx) {
-  const { db, money, theme, setTheme, sha256, refresh } = ctx;
+  const { db, money, theme, setTheme, customColors, setCustomColors, webauthn, sha256, refresh } = ctx;
   const [accounts, categories, templates, reminders, autobackup] = await Promise.all([
     db.getAll('accounts'), db.getAll('categories'), db.getAll('templates'), db.getAll('reminders'), db.getById('autobackup', 1),
   ]);
@@ -53,6 +88,15 @@ export async function renderAjustes(container, ctx) {
           <span class="slider"></span>
         </label>
       </div>
+      <div class="settings-row">
+        <span>Color principal (header)</span>
+        <input type="color" id="color-header" value="${customColors.header || '#5B0FBD'}" style="width:44px;height:32px;border:none;background:none;padding:0" />
+      </div>
+      <div class="settings-row">
+        <span>Color de acento (botón +)</span>
+        <input type="color" id="color-accent" value="${customColors.accent || '#14B8A6'}" style="width:44px;height:32px;border:none;background:none;padding:0" />
+      </div>
+      <button class="btn btn-outline" id="btn-reset-colors" style="margin-top:6px">Restablecer colores</button>
     </div>
 
     <div class="card">
@@ -64,6 +108,20 @@ export async function renderAjustes(container, ctx) {
           <span class="slider"></span>
         </label>
       </div>
+      ${webauthn.supported ? `
+        <div class="settings-row">
+          <span>Bloqueo biométrico (huella / Face ID)</span>
+          <label class="switch">
+            <input type="checkbox" id="bio-toggle" ${webauthn.registered ? 'checked' : ''} />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <p style="font-size:12px;color:var(--text-muted);margin:6px 0 0">
+          Usa el sensor biométrico de tu dispositivo como método rápido de desbloqueo. Como la app no tiene servidor,
+          la verificación depende de que el sistema operativo confirme tu identidad; te recomendamos mantener también
+          un PIN configurado como respaldo.
+        </p>
+      ` : ''}
       <p style="font-size:12px;color:var(--text-muted);margin:6px 0 0">
         No es posible la sincronización directa entre varios dispositivos porque la app no usa permisos de Internet.
         Tus datos permanecen sólo en este dispositivo.
@@ -76,6 +134,27 @@ export async function renderAjustes(container, ctx) {
       <form id="add-account-form" style="display:flex;gap:8px;margin-top:10px">
         <input type="text" name="name" placeholder="Nueva cuenta" required style="flex:1;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text)" />
         <button type="submit" class="btn btn-primary" style="width:auto;padding:10px 14px">Añadir</button>
+      </form>
+    </div>
+
+    <div class="card">
+      <h3>Categorías</h3>
+      ${renderCategoryList(categories, 'expense', 'Gastos')}
+      ${renderCategoryList(categories, 'income', 'Ingresos')}
+      <div class="segmented" id="cat-kind-toggle" style="margin-top:12px">
+        <button type="button" class="cat-kind-opt active expense" data-kind="expense">Gasto</button>
+        <button type="button" class="cat-kind-opt" data-kind="income">Ingreso</button>
+      </div>
+      <form id="add-category-form" style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
+        <input type="text" name="name" placeholder="Nombre de la categoría" required style="padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text)" />
+        <select name="parentId" id="cat-parent-select" style="padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text)">
+          ${categoryParentOptions(categories, 'expense')}
+        </select>
+        <div style="display:flex;align-items:center;gap:10px">
+          <label style="font-size:13px;color:var(--text-muted)">Color</label>
+          <input type="color" name="color" value="#5B0FBD" style="width:44px;height:32px;border:none;background:none;padding:0" />
+        </div>
+        <button type="submit" class="btn btn-primary">Agregar categoría</button>
       </form>
     </div>
 
@@ -132,6 +211,8 @@ export async function renderAjustes(container, ctx) {
           Importar transacciones (CSV)
           <input type="file" id="btn-import-csv" accept=".csv,text/csv" style="display:none" />
         </label>
+        <button class="btn btn-outline" id="btn-export-xls">Exportar transacciones (Excel)</button>
+        <button class="btn btn-outline" id="btn-export-html">Exportar transacciones (HTML)</button>
         <button class="btn btn-danger" id="btn-reset">Borrar todos los datos</button>
       </div>
     </div>
@@ -148,6 +229,12 @@ export async function renderAjustes(container, ctx) {
     setTheme(e.target.checked ? 'dark' : 'light');
   });
 
+  const colorHeaderInput = container.querySelector('#color-header');
+  const colorAccentInput = container.querySelector('#color-accent');
+  colorHeaderInput.addEventListener('change', () => setCustomColors(colorHeaderInput.value, colorAccentInput.value || null));
+  colorAccentInput.addEventListener('change', () => setCustomColors(colorHeaderInput.value || null, colorAccentInput.value));
+  container.querySelector('#btn-reset-colors').addEventListener('click', () => setCustomColors(null, null));
+
   container.querySelector('#pin-toggle').addEventListener('change', async (e) => {
     if (e.target.checked) {
       const pin = prompt('Crea un PIN (4 a 8 dígitos):');
@@ -161,6 +248,24 @@ export async function renderAjustes(container, ctx) {
       localStorage.removeItem('cc-pin-hash');
     }
   });
+
+  const bioToggle = container.querySelector('#bio-toggle');
+  if (bioToggle) {
+    bioToggle.addEventListener('change', async (e) => {
+      if (e.target.checked) {
+        try {
+          await webauthn.register();
+          alert('Bloqueo biométrico activado.');
+        } catch (err) {
+          e.target.checked = false;
+          alert('No se pudo activar el bloqueo biométrico en este dispositivo/navegador.');
+        }
+      } else {
+        webauthn.unregister();
+      }
+      refresh();
+    });
+  }
 
   container.querySelectorAll('[data-del-account]').forEach((btn) => {
     btn.addEventListener('click', async () => {
@@ -223,6 +328,34 @@ export async function renderAjustes(container, ctx) {
     URL.revokeObjectURL(url);
   });
 
+  container.querySelector('#btn-export-xls').addEventListener('click', async () => {
+    const [transactions, categories, accountsForXls] = await Promise.all([
+      db.getAll('transactions'), db.getAll('categories'), db.getAll('accounts'),
+    ]);
+    const xls = transactionsToXLS(transactions, categories, accountsForXls);
+    const blob = new Blob([xls], { type: 'application/vnd.ms-excel' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cuentas-claras-transacciones-${new Date().toISOString().slice(0, 10)}.xls`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  container.querySelector('#btn-export-html').addEventListener('click', async () => {
+    const [transactions, categories, accountsForHtml] = await Promise.all([
+      db.getAll('transactions'), db.getAll('categories'), db.getAll('accounts'),
+    ]);
+    const html = transactionsToHTML(transactions, categories, accountsForHtml);
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cuentas-claras-transacciones-${new Date().toISOString().slice(0, 10)}.html`;
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
   container.querySelector('#btn-import-csv').addEventListener('change', async (e) => {
     const file = e.target.files[0];
     e.target.value = '';
@@ -238,6 +371,54 @@ export async function renderAjustes(container, ctx) {
     }
     alert(message);
     refresh();
+  });
+
+  const catParentSelect = container.querySelector('#cat-parent-select');
+  let addCategoryKind = 'expense';
+  container.querySelectorAll('.cat-kind-opt').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      addCategoryKind = btn.dataset.kind;
+      container.querySelectorAll('.cat-kind-opt').forEach((b) => b.classList.remove('active', 'income', 'expense'));
+      btn.classList.add('active', addCategoryKind);
+      catParentSelect.innerHTML = categoryParentOptions(categories, addCategoryKind);
+    });
+  });
+
+  container.querySelector('#add-category-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const parentIdRaw = fd.get('parentId');
+    const parent = parentIdRaw ? categories.find((c) => c.id === parseInt(parentIdRaw, 10)) : null;
+    await db.put('categories', {
+      name: fd.get('name'),
+      kind: addCategoryKind,
+      color: fd.get('color'),
+      parentId: parent ? parent.id : null,
+    });
+    refresh();
+  });
+
+  container.querySelectorAll('[data-recolor-category]').forEach((input) => {
+    input.addEventListener('change', async () => {
+      const cat = await db.getById('categories', parseInt(input.dataset.recolorCategory, 10));
+      cat.color = input.value;
+      await db.put('categories', cat);
+      refresh();
+    });
+  });
+
+  container.querySelectorAll('[data-del-category]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const id = parseInt(btn.dataset.delCategory, 10);
+      const hasChildren = categories.some((c) => c.parentId === id);
+      if (hasChildren) {
+        alert('Esta categoría tiene subcategorías. Elimínalas primero.');
+        return;
+      }
+      if (!confirm('¿Eliminar esta categoría? Las transacciones asociadas no se eliminarán.')) return;
+      await db.remove('categories', id);
+      refresh();
+    });
   });
 
   container.querySelectorAll('[data-del-template]').forEach((btn) => {

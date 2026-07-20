@@ -89,7 +89,8 @@ export function expandRecurringInRange(transactions, rangeStart, rangeEnd) {
       if (diffDays > 0) occ = addDays(occ, Math.floor(diffDays / 7) * 7);
       while (occ < rangeStart) occ = addDays(occ, 7);
       while (occ <= rangeEnd) {
-        results.push(materializeOccurrence(t, occ));
+        const occurrence = materializeOccurrence(t, occ);
+        if (occurrence) results.push(occurrence);
         occ = addDays(occ, 7);
       }
     } else if (freq === 'monthly') {
@@ -98,7 +99,10 @@ export function expandRecurringInRange(transactions, rangeStart, rangeEnd) {
       if (monthsToAdd < 0) monthsToAdd = 0;
       let occ = addMonthsClamped(anchor, monthsToAdd, dayOfMonth);
       if (occ < rangeStart) occ = addMonthsClamped(anchor, monthsToAdd + 1, dayOfMonth);
-      if (occ <= rangeEnd) results.push(materializeOccurrence(t, occ));
+      if (occ <= rangeEnd) {
+        const occurrence = materializeOccurrence(t, occ);
+        if (occurrence) results.push(occurrence);
+      }
     }
   }
 
@@ -116,12 +120,16 @@ export function expandRecurringForMonth(transactions, year, month) {
 function materializeOccurrence(source, date) {
   const iso = toISO(date);
   if (iso === source.date) return source;
+  const exception = source.exceptions?.[iso];
+  if (exception?.skip) return null;
   return {
     ...source,
+    ...exception,
     id: `${source.id}:${iso}`,
     date: iso,
     virtual: true,
     sourceId: source.id,
+    hasException: !!exception,
   };
 }
 
