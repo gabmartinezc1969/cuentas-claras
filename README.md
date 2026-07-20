@@ -4,6 +4,8 @@ App de finanzas personales y presupuesto, **100% offline y privada** (sin backen
 
 Construida como PWA vanilla (HTML + CSS + JavaScript con módulos ES, sin frameworks ni dependencias externas) para que sea instalable desde el navegador tanto en Android como en iOS/desktop.
 
+**Demo en vivo:** https://gabmartinezc1969.github.io/cuentas-claras/
+
 ## Cómo probarla localmente
 
 No requiere build ni `npm install`. Solo necesita servirse por HTTP (los módulos ES y el service worker no funcionan con `file://`).
